@@ -1,9 +1,9 @@
-//routs/post.js
-const router = express.Router();
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const argon2 = require('argon2'); // Argon2 라이브러리 로드
 require('dotenv').config(); // 환경 변수 로드
 
+const router = express.Router();
 const app = express();
 app.use(express.json()); // JSON 요청을 처리
 
@@ -13,14 +13,17 @@ const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // C: Create - 새로운 포스트 생성
-app.post('/posts', async (req, res) => {
-    const { title, name, email, picture, cor, lr_Y, rf_Y, explain } = req.body;
+router.post('/posts', async (req, res) => {
+    const { title, name, email, password, cor, lr_Y, rf_Y, explain } = req.body;
 
     try {
+        // 비밀번호 암호화 (Argon2 사용)
+        const hashedPassword = await argon2.hash(password);
+
         // 사용자 정보 저장 (upsert)
         const { data: userData, error: userError } = await supabase
             .from('users')
-            .upsert({ email, name, picture }, { onConflict: 'email' })
+            .upsert({ email, name, password: hashedPassword }, { onConflict: 'email' })
             .select('id');
 
         if (userError) throw userError;
@@ -41,13 +44,13 @@ app.post('/posts', async (req, res) => {
 });
 
 // R: Read - 특정 포스트 조회
-app.get('/posts/:id', async (req, res) => {
+router.get('/posts/:id', async (req, res) => {
     const postId = req.params.id;
 
     try {
         const { data: postData, error: postError } = await supabase
             .from('posts')
-            .select('*, users(name, email, picture)')
+            .select('*, users(name, email)')
             .eq('id', postId)
             .single(); // 단일 결과
 
@@ -60,11 +63,11 @@ app.get('/posts/:id', async (req, res) => {
 });
 
 // R: Read - 모든 포스트 조회 (페이지네이션 추가 가능)
-app.get('/posts', async (req, res) => {
+router.get('/posts', async (req, res) => {
     try {
         const { data: postData, error: postError } = await supabase
             .from('posts')
-            .select('*, users(name, email, picture)');
+            .select('*, users(name, email)');
 
         if (postError) throw postError;
 
@@ -75,7 +78,7 @@ app.get('/posts', async (req, res) => {
 });
 
 // U: Update - 포스트 수정
-app.put('/posts/:id', async (req, res) => {
+router.put('/posts/:id', async (req, res) => {
     const postId = req.params.id;
     const { title, cor, lr_Y, rf_Y, explain } = req.body;
 
@@ -94,7 +97,7 @@ app.put('/posts/:id', async (req, res) => {
 });
 
 // D: Delete - 포스트 삭제
-app.delete('/posts/:id', async (req, res) => {
+router.delete('/posts/:id', async (req, res) => {
     const postId = req.params.id;
 
     try {
